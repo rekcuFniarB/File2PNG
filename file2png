@@ -74,7 +74,7 @@ showinfo () {
 ## $2 output file
 restorefile () {
     DIR="$(dirname "$1")"
-    _RAW="/tmp/$1.raw"
+    _RAW="/tmp/$(basename "$1").raw"
     
     convert png:"$1" rgb:"$_RAW"
     
