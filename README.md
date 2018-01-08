@@ -22,7 +22,11 @@ This restores file from `input_file.png` to `output_file`.
     file2png -restore `input_file.png`
 
 Ommiting output file name will restore to original file name.
-    
+
+Example container-image:
+
+![output example](https://i.imgur.com/G6MYiXh.png "output example")
+
 ### Install
 
 Copy `file2png` script to any place where you will run it from (`/usr/local/bin` for example).
