@@ -1,0 +1,174 @@
+#!/bin/sh
+
+##  <one line to give the program's name and a brief idea of what it does.>
+##  File2PNG script. Store any file as PNG image.
+##  Copyright (C) 2018  BrainFucker <retratserif@gmail.com>
+##  
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##  
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+
+USAGE="Usage:
+    $0 -store input_file output_file.png
+        Store input_file as output_file.png
+    
+    $0 -restore input_file.png output_file
+        Restore file from input_file.png
+        Will save original file name saved to same directory as input file
+        if no output file supplied.
+    
+    $0 -info input_file.png
+        Print file info.
+
+    $0 -help
+        Print this help.
+    
+    File2PNG  Copyright (C) 2018  BrainFucker
+    This program comes with ABSOLUTELY NO WARRANTY.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions."
+
+## print messages to stderr
+errlog () {
+    echo "$@" 1>&2
+}
+
+## check for installed required utils
+UTILS="convert sha256sum dd bc awk grep"
+for anutil in $UTILS; do
+    if [ _"$(which "$anutil")" = _ ]; then
+        errlog "Error: util $anutil not found."
+        exit 1
+    fi
+done
+
+## Exit if no args supplied
+if [ _"$1" = _ ] || [ _"$2" = _ ]; then
+    errlog "$USAGE"
+    exit 0
+fi
+
+## Exit if file not exists
+if [ ! -f "$2" ]; then
+    errlog "File $2 not exists."
+    exit 1
+fi
+
+
+## Show supplied file info
+showinfo () {
+    INFO="$(convert png:"$1" rgb:-   | grep -a '###')"
+    echo "$INFO" | grep -a '###NAME:'   | sed 's/###//g'
+    echo "$INFO" | grep -a '###SIZE:'   | sed 's/###//g'
+    echo "$INFO" | grep -a '###SHA256:' | sed 's/###//g'
+}
+
+## restore file
+## $1 input file
+## $2 output file
+restorefile () {
+    DIR="$(dirname "$1")"
+    _RAW="/tmp/$1.raw"
+    
+    convert png:"$1" rgb:"$_RAW"
+    
+    INFO="$( grep -a '###' "$_RAW" )"
+    _SIZE="$(echo "$INFO" | grep -a '###SIZE:'   | awk '{print $2}')"
+    _SHA="$( echo "$INFO" | grep -a '###SHA256:' | awk '{print $2}')"
+    _NAME="$(echo "$INFO" | grep -a '###NAME:'   | sed 's/###NAME: //' | sed 's/ ###//')"
+
+    if [ _"$_SIZE" = _ ] || [ _"$_NAME" = _ ] || [ _"$_SHA" = _ ]; then
+        errlog "No data found inside. Restoring failed."
+        rm "$_RAW"
+        exit 1
+    fi
+    
+    if [ _"$2" = _ ]; then
+        OUTPUT="$DIR/$_NAME"
+    else
+        OUTPUT="$2"
+    fi
+    
+    dd if="$_RAW" of="$OUTPUT" bs="$_SIZE" count=1
+    rm "$_RAW"
+
+    echo "$OUTPUT"
+
+    _NEWSHA="$(sha256sum "$OUTPUT" | awk '{print $1}')"
+    
+    if [ _"$_NEWSHA" != _"$_SHA" ]; then
+        errlog "Sha sums not equal, something weng wrong.
+        Original: $_SHA
+        Output:   $_NEWSHA"
+        exit 1
+    fi
+}
+
+## store file
+## $1 input file
+## $2 output file
+storefile () {
+    NAME="$(basename "$1")"
+    if [ "_$2" = _ ]; then
+        OUTPUT="/tmp/$NAME.png"
+    else
+        OUTPUT="$2"
+    fi
+    
+    SHA="$(sha256sum "$1" | awk '{print $1}')"
+
+    SIZE="$(stat -c '%s' "$1")"
+
+    TMP="/tmp/$SHA"
+
+    cp "$1" "$TMP"
+
+    ## Store metadata
+    echo '' >> "$TMP"
+    echo "###SIZE: $SIZE ###"  >> "$TMP"
+    echo "###NAME: $NAME ###"  >> "$TMP"
+    echo "###SHA256: $SHA ###" >> "$TMP"
+
+    _PIXELS=$(( $SIZE  / 3 ))
+
+    errlog "TMP pixels: $_PIXELS"
+
+    RESOL="$(echo "sqrt($_PIXELS) +1" | bc)"
+
+    errlog "Target resolution: ${RESOL}x${RESOL}"
+
+    PIXELS=$(( $RESOL * $RESOL ))
+
+    CONTAINERSIZE=$(( $PIXELS * 3 ))
+
+    errlog "Container size: $CONTAINERSIZE"
+
+    BYTESDIFF=$(( $CONTAINERSIZE - $SIZE ))
+
+    dd if=/dev/zero bs=$BYTESDIFF count=1 >> "$TMP"
+
+    convert -size ${RESOL}x${RESOL} -depth 8 rgb:"$TMP" png:"$OUTPUT"
+
+    echo "$OUTPUT"
+    rm "$TMP"
+}
+
+if [ "$1" = '-info' ]; then
+    showinfo "$2"
+    exit 0
+elif [ "$1" = '-restore' ]; then
+    restorefile "$2" "$3"
+    exit 0
+elif [ "$1" = '-store' ]; then
+    storefile "$2" "$3"
+    exit 0
+else
+    errlog "$USAGE"
+    exit 1
+fi
