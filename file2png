@@ -1,6 +1,5 @@
 #!/bin/sh
 
-##  <one line to give the program's name and a brief idea of what it does.>
 ##  File2PNG script. Store any file as PNG image.
 ##  Copyright (C) 2018  BrainFucker <retratserif@gmail.com>
 ##  
