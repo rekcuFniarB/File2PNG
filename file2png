@@ -13,22 +13,26 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
+VERSION='0.2'
+
+_NAME_="$(basename "$0")"
+
 USAGE="Usage:
-    $0 -store input_file output_file.png
+    $_NAME_ -store input_file output_file.png
         Store input_file as output_file.png
     
-    $0 -restore input_file.png output_file
+    $_NAME_ -restore input_file.png output_file
         Restore file from input_file.png
         Will save original file name saved to same directory as input file
         if no output file supplied.
     
-    $0 -info input_file.png
+    $_NAME_ -info input_file.png
         Print file info.
 
-    $0 -help
+    $_NAME_ -help
         Print this help.
     
-    File2PNG  Copyright (C) 2018  BrainFucker
+    File2PNG $VERSION Copyright (C) 2018  BrainFucker
     This program comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it
     under certain conditions."
@@ -62,10 +66,12 @@ fi
 
 ## Show supplied file info
 showinfo () {
-    INFO="$(convert png:"$1" rgb:-   | grep -a '###')"
-    echo "$INFO" | grep -a '###NAME:'   | sed 's/###//g'
-    echo "$INFO" | grep -a '###SIZE:'   | sed 's/###//g'
-    echo "$INFO" | grep -a '###SHA256:' | sed 's/###//g'
+    INFO="$(convert PNG:"$1" RGB:-   | grep -a '###')"
+    echo "$INFO" | grep -a '###NAME:'    | sed 's/###//g'
+    echo "$INFO" | grep -a '###SIZE:'    | sed 's/###//g'
+    echo "$INFO" | grep -a '###SHA256:'  | sed 's/###//g'
+    echo "$INFO" | grep -a '###VERSION:' | sed 's/###//g'
+    errlog $VERSION
 }
 
 ## restore file
@@ -75,17 +81,22 @@ restorefile () {
     DIR="$(dirname "$1")"
     _RAW="/tmp/$(basename "$1").raw"
     
-    convert png:"$1" rgb:"$_RAW"
+    convert PNG:"$1" RGB:"$_RAW"
     
     INFO="$( grep -a '###' "$_RAW" )"
-    _SIZE="$(echo "$INFO" | grep -a '###SIZE:'   | awk '{print $2}')"
-    _SHA="$( echo "$INFO" | grep -a '###SHA256:' | awk '{print $2}')"
-    _NAME="$(echo "$INFO" | grep -a '###NAME:'   | sed 's/###NAME: //' | sed 's/ ###//')"
+    _SIZE="$(    echo "$INFO" | grep -a '###SIZE:'    | awk '{print $2}')"
+    _SHA="$(     echo "$INFO" | grep -a '###SHA256:'  | awk '{print $2}')"
+    _VERSION="$( echo "$INFO" | grep -a '###VERSION:' | awk '{print $2}')"
+    _NAME="$(    echo "$INFO" | grep -a '###NAME:'    | sed 's/###NAME: //' | sed 's/ ###//')"
 
     if [ _"$_SIZE" = _ ] || [ _"$_NAME" = _ ] || [ _"$_SHA" = _ ]; then
         errlog "No data found inside. Restoring failed."
         rm "$_RAW"
         exit 1
+    fi
+    
+    if [ _"$_VERSION" != _"$VERSION" ]; then
+        errlog "Warning: file was created by different version of $_NAME_."
     fi
     
     if [ _"$2" = _ ]; then
@@ -133,8 +144,9 @@ storefile () {
     echo "###SIZE: $SIZE ###"  >> "$TMP"
     echo "###NAME: $NAME ###"  >> "$TMP"
     echo "###SHA256: $SHA ###" >> "$TMP"
+    echo "###VERSION: $VERSION ###" >> "$TMP"
 
-    _PIXELS=$(( $SIZE  / 3 ))
+    _PIXELS=$(( $SIZE  / 6 ))
 
     errlog "TMP pixels: $_PIXELS"
 
@@ -144,15 +156,17 @@ storefile () {
 
     PIXELS=$(( $RESOL * $RESOL ))
 
-    CONTAINERSIZE=$(( $PIXELS * 3 ))
+    ## calculating target size
+    CONTAINERSIZE=$(( $PIXELS * 6 ))
 
     errlog "Container size: $CONTAINERSIZE"
 
     BYTESDIFF=$(( $CONTAINERSIZE - $SIZE ))
-
+    
+    ## adding missing bytes
     dd if=/dev/zero bs=$BYTESDIFF count=1 >> "$TMP"
 
-    convert -size ${RESOL}x${RESOL} -depth 8 rgb:"$TMP" png:"$OUTPUT"
+    convert -size ${RESOL}x${RESOL} -depth 16 RGB:"$TMP" PNG00:"$OUTPUT"
 
     echo "$OUTPUT"
     rm "$TMP"
