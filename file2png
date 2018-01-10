@@ -71,7 +71,6 @@ showinfo () {
     echo "$INFO" | grep -a '###SIZE:'    | sed 's/###//g'
     echo "$INFO" | grep -a '###SHA256:'  | sed 's/###//g'
     echo "$INFO" | grep -a '###VERSION:' | sed 's/###//g'
-    errlog $VERSION
 }
 
 ## restore file
