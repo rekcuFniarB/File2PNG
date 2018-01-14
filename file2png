@@ -13,7 +13,7 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.2'
+VERSION='0.3'
 
 _NAME_="$(basename "$0")"
 
@@ -145,6 +145,8 @@ storefile () {
     echo "###SHA256: $SHA ###" >> "$TMP"
     echo "###VERSION: $VERSION ###" >> "$TMP"
 
+    SIZE="$(stat -c '%s' "$TMP")"
+
     _PIXELS=$(( $SIZE  / 6 ))
 
     errlog "TMP pixels: $_PIXELS"
@@ -162,9 +164,15 @@ storefile () {
 
     BYTESDIFF=$(( $CONTAINERSIZE - $SIZE ))
     
-    ## adding missing bytes
-    dd if=/dev/zero bs=$BYTESDIFF count=1 >> "$TMP"
-
+    
+    if [ $BYTESDIFF -gt 0 ]; then
+        ## adding missing bytes
+        dd if=/dev/zero bs=$BYTESDIFF count=1 >> "$TMP"
+    elif [ $BYTESDIFF -lt 0 ]; then
+        errlog "Error: unexpected container size."
+        exit 1
+    fi
+    
     convert -size ${RESOL}x${RESOL} -depth 16 RGB:"$TMP" PNG00:"$OUTPUT"
 
     echo "$OUTPUT"
