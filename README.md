@@ -19,13 +19,15 @@ Restore file:
 
 This restores file from `input_file.png` to `output_file`.
 
-    file2png -restore `input_file.png`
+    file2png -restore input_file.png
 
 Ommiting output file name will restore to original file name.
 
 Example container-image:
 
 ![output example](https://i.imgur.com/G6MYiXh.png "output example")
+
+Resulting image file size remains almost same.
 
 ### Install
 
