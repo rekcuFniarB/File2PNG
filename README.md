@@ -23,6 +23,8 @@ This restores file from `input_file.png` to `output_file`.
 
 Ommiting output file name will restore to original file name.
 
+Using `-` as filename will use stdin/stdout (not supported when using `-store`).
+
 Example container-image:
 
 ![output example](https://i.imgur.com/G6MYiXh.png "output example")
@@ -42,3 +44,4 @@ Requirements:
 * `awk`
 * `sha256sum`
 * `dd`
+* `mktemp`

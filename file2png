@@ -13,7 +13,7 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.3'
+VERSION='0.4'
 
 _NAME_="$(basename "$0")"
 
@@ -43,7 +43,7 @@ errlog () {
 }
 
 ## check for installed required utils
-UTILS="convert sha256sum dd bc awk grep"
+UTILS="convert sha256sum dd bc awk grep mktemp"
 for anutil in $UTILS; do
     if [ _"$(which "$anutil")" = _ ]; then
         errlog "Error: util $anutil not found."
@@ -57,12 +57,24 @@ if [ _"$1" = _ ] || [ _"$2" = _ ]; then
     exit 0
 fi
 
-## Exit if file not exists
-if [ ! -f "$2" ]; then
-    errlog "File $2 not exists."
-    exit 1
+if [ _"$2" = _- ]; then
+    ## Read from stdin if supplied filename is -
+    INFILE='/dev/stdin'
+else
+    INFILE="$2"
+    ## Exit if file not exists
+    if [ ! -f "$INFILE" ]; then
+        errlog "File $INFILE not exists."
+        exit 1
+    fi
 fi
 
+if [ _"$3" = "_-" ]; then
+    ## Output to stdout if supplied filename is -
+    OUTFILE='/dev/stdout'
+else
+    OUTFILE="$3"
+fi
 
 ## Show supplied file info
 showinfo () {
@@ -77,8 +89,7 @@ showinfo () {
 ## $1 input file
 ## $2 output file
 restorefile () {
-    DIR="$(dirname "$1")"
-    _RAW="/tmp/$(basename "$1").raw"
+    _RAW="$(mktemp)"
     
     convert PNG:"$1" RGB:"$_RAW"
     
@@ -99,23 +110,30 @@ restorefile () {
     fi
     
     if [ _"$2" = _ ]; then
+        DIR="$(dirname "$1")"
         OUTPUT="$DIR/$_NAME"
     else
         OUTPUT="$2"
     fi
     
-    dd if="$_RAW" of="$OUTPUT" bs="$_SIZE" count=1
+    if [ _"$OUTPUT" = _'/dev/stdout' ]; then
+        dd if="$_RAW" bs="$_SIZE" count=1
+    else
+        dd if="$_RAW" of="$OUTPUT" bs="$_SIZE" count=1
+    fi
+    
     rm "$_RAW"
 
-    echo "$OUTPUT"
-
-    _NEWSHA="$(sha256sum "$OUTPUT" | awk '{print $1}')"
-    
-    if [ _"$_NEWSHA" != _"$_SHA" ]; then
-        errlog "Sha sums not equal, something weng wrong.
-        Original: $_SHA
-        Output:   $_NEWSHA"
-        exit 1
+    if [ _"$OUTPUT" != _'/dev/stdout' ]; then
+        echo "$OUTPUT"
+        
+        _NEWSHA="$(sha256sum "$OUTPUT" | awk '{print $1}')"
+        if [ _"$_NEWSHA" != _"$_SHA" ]; then
+            errlog "Sha sums not equal, something weng wrong.
+            Original: $_SHA
+            Output:   $_NEWSHA"
+            exit 1
+        fi
     fi
 }
 
@@ -123,9 +141,15 @@ restorefile () {
 ## $1 input file
 ## $2 output file
 storefile () {
+    if [ _"$1" = _'/dev/stdin' ] || [ _"$2" = _'/dev/stdout' ]; then
+        errlog "Stdin and stdout not supported for this type of operation."
+        exit 1
+    fi
+    
     NAME="$(basename "$1")"
+    
     if [ "_$2" = _ ]; then
-        OUTPUT="/tmp/$NAME.png"
+        OUTPUT="$(mktemp 'XXXXXXXXXX.png')"
     else
         OUTPUT="$2"
     fi
@@ -134,7 +158,7 @@ storefile () {
 
     SIZE="$(stat -c '%s' "$1")"
 
-    TMP="/tmp/$SHA"
+    TMP="$(mktemp)"
 
     cp "$1" "$TMP"
 
@@ -176,17 +200,18 @@ storefile () {
     convert -size ${RESOL}x${RESOL} -depth 16 RGB:"$TMP" PNG00:"$OUTPUT"
 
     echo "$OUTPUT"
+    
     rm "$TMP"
 }
 
 if [ "$1" = '-info' ]; then
-    showinfo "$2"
+    showinfo "$INFILE"
     exit 0
 elif [ "$1" = '-restore' ]; then
-    restorefile "$2" "$3"
+    restorefile "$INFILE" "$OUTFILE"
     exit 0
 elif [ "$1" = '-store' ]; then
-    storefile "$2" "$3"
+    storefile "$INFILE" "$OUTFILE"
     exit 0
 else
     errlog "$USAGE"
