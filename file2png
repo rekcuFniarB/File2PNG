@@ -13,11 +13,11 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.4'
+VERSION='0.5'
 
 _NAME_="$(basename "$0")"
 
-USAGE="Usage:
+USAGE="USAGE
     $_NAME_ -store input_file output_file.png
         Store input_file as output_file.png
     
@@ -32,6 +32,11 @@ USAGE="Usage:
     $_NAME_ -help
         Print this help.
     
+ENVIRONMENT
+    BITDEPTH
+        Force image bit depth. Using 16 by default. Supported values: 8 or 16.
+
+COPYRIGHT
     File2PNG $VERSION Copyright (C) 2018  BrainFucker
     This program comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it
@@ -141,6 +146,16 @@ restorefile () {
 ## $1 input file
 ## $2 output file
 storefile () {
+    ## force 8 bit depth by setting this env variable
+    ## some image hosters don't like 16bit.
+    ## using 16 bit by default
+    if [ _"$BITDEPTH" != _8 ]; then
+        BITDEPTH=16
+    fi
+
+    ## bytes per 3 color pixel
+    PIXBYTE=$(( $BITDEPTH * 3 / 8 ))
+    
     if [ _"$1" = _'/dev/stdin' ] || [ _"$2" = _'/dev/stdout' ]; then
         errlog "Stdin and stdout not supported for this type of operation."
         exit 1
@@ -171,7 +186,7 @@ storefile () {
 
     SIZE="$(stat -c '%s' "$TMP")"
 
-    _PIXELS=$(( $SIZE  / 6 ))
+    _PIXELS=$(( $SIZE  / $PIXBYTE ))
 
     errlog "TMP pixels: $_PIXELS"
 
@@ -182,7 +197,7 @@ storefile () {
     PIXELS=$(( $RESOL * $RESOL ))
 
     ## calculating target size
-    CONTAINERSIZE=$(( $PIXELS * 6 ))
+    CONTAINERSIZE=$(( $PIXELS * $PIXBYTE ))
 
     errlog "Container size: $CONTAINERSIZE"
 
@@ -197,7 +212,7 @@ storefile () {
         exit 1
     fi
     
-    convert -size ${RESOL}x${RESOL} -depth 16 RGB:"$TMP" PNG00:"$OUTPUT"
+    convert -size ${RESOL}x${RESOL} -depth $BITDEPTH RGB:"$TMP" PNG00:"$OUTPUT"
 
     echo "$OUTPUT"
     
