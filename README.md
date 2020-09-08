@@ -1,7 +1,7 @@
 File2PNG
 ========
 
-This is a shell script that stores any file as PNG image. It's based on `convert` util from **Imagemagick**.
+This simple shell utility converts any file into a PNG image. Powered by **ImageMagick**'s `convert` tool, its primary purpose is to bypass file restrictions on platforms that only allow image uploads. Not a steganography tool.
 
 ### Usage
 
@@ -29,7 +29,7 @@ Example container-image:
 
 ![output example](https://i.imgur.com/G6MYiXh.png "output example")
 
-Resulting image file size remains almost same.
+Resulting image file size remains almost the same.
 
 ### Install
 

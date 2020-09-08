@@ -13,18 +13,22 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.7'
+VERSION='0.8'
 
 _NAME_="$(basename "$0")"
 
 USAGE="USAGE
     $_NAME_ -store input_file output_file.png
         Store input_file as output_file.png
+        Optional -nometa may be used if you don't want to store metadata.
+        In this case file size must be passed to -size arg when restoring.
     
     $_NAME_ -restore input_file.png output_file
         Restore file from input_file.png
         Will save original file name saved to same directory as input file
         if no output file supplied.
+        Optional bytes size may be bassed to -restore arg in case of
+        metadata was disabled.
     
     $_NAME_ -info input_file.png
         Print file info.
@@ -173,9 +177,17 @@ restorefile () {
         OUTPUT="$DIR/$_NAME"
     else
         OUTPUT="$2"
+        if [ -z $_NAME ]; then
+            _NAME="$(basename "$2")"
+        fi
+    fi
+    
+    ## File has no meta but restore size passed manually
+    if [ -z "$_SIZE" ] && [ -n "$_arg_size" ]; then
+        _SIZE="$_arg_size"
     fi
 
-    if [ _"$_SIZE" = _ ] || [ _"$_NAME" = _ ] || [ _"$_SHA" = _ ]; then
+    if [ -z "$_SIZE" ] || [ -z "$_NAME" ]; then
         errlog "No data found inside. Restoring failed."
         _SIZE=''
         if [ -z "$_arg_force" ]; then
@@ -184,7 +196,7 @@ restorefile () {
         fi
     fi
     
-    if [ _"$_VERSION" != _"$VERSION" ]; then
+    if [ -n "$_VERSION" -a _"$_VERSION" != _"$VERSION" ]; then
         errlog "Warning: file was created by different version of $_NAME_."
     fi
     
@@ -205,7 +217,7 @@ restorefile () {
         echo "$OUTPUT"
         
         _NEWSHA="$(sha256sum "$OUTPUT" | awk '{print $1}')"
-        if [ _"$_NEWSHA" != _"$_SHA" ]; then
+        if [ -n "$_SHA" -a _"$_NEWSHA" != _"$_SHA" ]; then
             errlog "Sha sums not equal, something weng wrong.
             Original: $_SHA
             Output:   $_NEWSHA"
@@ -253,19 +265,21 @@ storefile () {
 
     cp "$IN" "$TMP"
 
-    ## Store metadata
-    echo '' >> "$TMP"
-    echo "###SIZE: $SIZE :EZIS###"  >> "$TMP"
-    echo "###NAME: $NAME :ENAM###"  >> "$TMP"
-    echo "###SHA256: $SHA :652AHS###" >> "$TMP"
-    echo "###VERSION: $VERSION :NOISREV###" >> "$TMP"
-    if [ -n "$_arg_comment" ]; then
-        echo "$_arg_comment" | while read L; do
-            echo "###COMMENT: $L :TNEMMOC###" >> "$TMP"
-        done
+    if [ -z $_arg_nometa ]; then
+        ## Store metadata
+        echo '' >> "$TMP"
+        echo "###SIZE: $SIZE :EZIS###"  >> "$TMP"
+        echo "###NAME: $NAME :ENAM###"  >> "$TMP"
+        echo "###SHA256: $SHA :652AHS###" >> "$TMP"
+        echo "###VERSION: $VERSION :NOISREV###" >> "$TMP"
+        if [ -n "$_arg_comment" ]; then
+            echo "$_arg_comment" | while read L; do
+                echo "###COMMENT: $L :TNEMMOC###" >> "$TMP"
+            done
+        fi
+        echo "###UTIL:  Decode: https://github.com/rekcuFniarB/file2png#readme  :LITU###" >> "$TMP"
     fi
-    echo "###UTIL:  Decode: https://github.com/rekcuFniarB/file2png#readme  :LITU###" >> "$TMP"
-
+    
     SIZE="$(stat -c '%s' "$TMP")"
     
     _PIXELS=$(( $SIZE  / $PIXBYTE ))
