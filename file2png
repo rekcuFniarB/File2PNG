@@ -13,7 +13,7 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.6'
+VERSION='0.7'
 
 _NAME_="$(basename "$0")"
 
@@ -29,13 +29,17 @@ USAGE="USAGE
     $_NAME_ -info input_file.png
         Print file info.
     
-    $_NAME_ -bitdepth
+OPTIONS
+    -comment 'comment string'
+        Add comment.
+    
+    -bitdepth
         Force image bit depth. Using 16 by default. Supported values: 8 or 16.
     
-    $_NAME -force
+    -force
         Force output even if decode failed.
     
-    $_NAME_ -help
+    -help
         Print this help.
     
 
@@ -141,10 +145,11 @@ fn_check_file() {
 ## Show supplied file info
 showinfo () {
     INFO="$(convert PNG:"$1" RGB:-   | grep -a '###')"
-    echo "$INFO" | grep -a '###NAME:'    | sed 's/###//g'
-    echo "$INFO" | grep -a '###SIZE:'    | sed 's/###//g'
-    echo "$INFO" | grep -a '###SHA256:'  | sed 's/###//g'
-    echo "$INFO" | grep -a '###VERSION:' | sed 's/###//g'
+    echo "$INFO" | grep -a '###NAME:'    | sed 's/:ENAM###//g'   | sed 's/###//g'
+    echo "$INFO" | grep -a '###SIZE:'    | sed 's/:EZIS###//g'   | sed 's/###//g'
+    echo "$INFO" | grep -a '###SHA256:'  | sed 's/:652AHS###//g' | sed 's/###//g'
+    echo "$INFO" | grep -a '###VERSION:' | sed 's/:NOISREV###//g'| sed 's/###//g'
+    echo "$INFO" | grep -a '###COMMENT:' | sed 's/:TNEMMOC###//g'| sed 's/###//g'
 } # showinfo
 
 ## restore file
@@ -161,7 +166,7 @@ restorefile () {
     _SIZE="$(    echo -n "$INFO" | grep -a '###SIZE:'    | awk '{print $2}')"
     _SHA="$(     echo -n "$INFO" | grep -a '###SHA256:'  | awk '{print $2}')"
     _VERSION="$( echo -n "$INFO" | grep -a '###VERSION:' | awk '{print $2}')"
-    _NAME="$(    echo -n "$INFO" | grep -a '###NAME:'    | sed 's/###NAME: //' | sed 's/ ###//')"
+    _NAME="$(    echo -n "$INFO" | grep -a '###NAME:'    | sed 's/###NAME: //' | sed 's/ :ENAM###//')"
     
     if [ -z "$2" ]; then
         DIR="$(dirname "$IN")"
@@ -250,10 +255,16 @@ storefile () {
 
     ## Store metadata
     echo '' >> "$TMP"
-    echo "###SIZE: $SIZE ###"  >> "$TMP"
-    echo "###NAME: $NAME ###"  >> "$TMP"
-    echo "###SHA256: $SHA ###" >> "$TMP"
-    echo "###VERSION: $VERSION ###" >> "$TMP"
+    echo "###SIZE: $SIZE :EZIS###"  >> "$TMP"
+    echo "###NAME: $NAME :ENAM###"  >> "$TMP"
+    echo "###SHA256: $SHA :652AHS###" >> "$TMP"
+    echo "###VERSION: $VERSION :NOISREV###" >> "$TMP"
+    if [ -n "$_arg_comment" ]; then
+        echo "$_arg_comment" | while read L; do
+            echo "###COMMENT: $L :TNEMMOC###" >> "$TMP"
+        done
+    fi
+    echo "###UTIL:  Decode: https://github.com/rekcuFniarB/file2png#readme  :LITU###" >> "$TMP"
 
     SIZE="$(stat -c '%s' "$TMP")"
     
