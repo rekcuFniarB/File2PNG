@@ -13,7 +13,7 @@
 ##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ##  GNU General Public License for more details.
 
-VERSION='0.5'
+VERSION='0.6'
 
 _NAME_="$(basename "$0")"
 
@@ -28,13 +28,16 @@ USAGE="USAGE
     
     $_NAME_ -info input_file.png
         Print file info.
-
+    
+    $_NAME_ -bitdepth
+        Force image bit depth. Using 16 by default. Supported values: 8 or 16.
+    
+    $_NAME -force
+        Force output even if decode failed.
+    
     $_NAME_ -help
         Print this help.
     
-ENVIRONMENT
-    BITDEPTH
-        Force image bit depth. Using 16 by default. Supported values: 8 or 16.
 
 COPYRIGHT
     File2PNG $VERSION Copyright (C) 2018  BrainFucker
@@ -47,8 +50,55 @@ errlog () {
     echo "$@" 1>&2
 }
 
+## Args parser
+## Supported arg formats:
+##     -arg --arg (both are identical)
+##     -arg value
+##     -arg=value
+parse_args() {
+    local ARG _PREV_ARG _ARG _VAR _VAL _ARGN SKIP
+    __ARGS=''
+    for ARG in "$@"; do
+        case "$ARG" in
+            --) _PREV_ARG=''
+                SKIP=1 ;;
+            -[-a-zA-Z0-9]*) if [ -z "$SKIP" ]; then
+                    _ARG="$(echo -n "$ARG" | sed 's/^-\+//' | sed 's/-/_/g' | tr -d '\r' | tr '\t\v\n' ' ')"
+                    case "$_ARG" in
+                        *=*) _PREV_ARG=''
+                             _VAR="$(echo -n "$_ARG" | sed 's/=.*//')"
+                             _VAL="$(echo -n "$_ARG" | sed 's/.\+=//')"
+                             if [ -z "$_VAL" ]; then
+                                 _VAL=0
+                             fi
+                             __ARGS="$__ARGS\n__arg_${_VAR}__ $_VAL"
+                             eval "_arg_$_VAR=\$_VAL" ;;
+                          *) _PREV_ARG="_arg_$_ARG"
+                             __ARGS="$__ARGS\n__arg_${_ARG}__ 1"
+                             eval "_arg_$_ARG=1" ;;
+                    esac
+                fi ;;
+            *) if [ -n "$_PREV_ARG" ]; then
+                   __ARGS="$__ARGS\n_${_PREV_ARG}__ $ARG"
+                   eval "$_PREV_ARG=\$ARG"
+                   _PREV_ARG=''
+               else
+                   _ARGN=$((_ARGN+1))
+                   __ARGS="$__ARGS\n__arg_${_ARGN}__ $_ARG"
+                   eval "_arg$_ARGN=\$ARG"
+               fi ;;
+        esac
+    done
+} # parse_args()
+
+## get arg value
+## $1 arg name
+fn_get_arg() {
+    echo -n "$__ARGS" | grep "__arg_$1__" | tail -n 1 | sed "s/__arg_$1__ //"
+}
+
 ## check for installed required utils
-UTILS="convert sha256sum dd bc awk grep mktemp"
+UTILS="convert sha256sum dd bc awk grep mktemp sed"
 for anutil in $UTILS; do
     if [ _"$(which "$anutil")" = _ ]; then
         errlog "Error: util $anutil not found."
@@ -56,30 +106,37 @@ for anutil in $UTILS; do
     fi
 done
 
+parse_args "$@"
+
 ## Exit if no args supplied
 if [ _"$1" = _ ] || [ _"$2" = _ ]; then
     errlog "$USAGE"
     exit 0
 fi
 
-if [ _"$2" = _- ]; then
-    ## Read from stdin if supplied filename is -
-    INFILE='/dev/stdin'
-else
-    INFILE="$2"
-    ## Exit if file not exists
-    if [ ! -f "$INFILE" ]; then
-        errlog "File $INFILE not exists."
-        exit 1
+fn_check_file() {
+    local FILE
+    local DEV
+    
+    if [ _"$2" != _"out" ] && [ _"$2" != _"in" ]; then
+        DEV='/dev/stdin'
+    else
+        DEV="/dev/std$2"
     fi
-fi
-
-if [ _"$3" = "_-" ]; then
-    ## Output to stdout if supplied filename is -
-    OUTFILE='/dev/stdout'
-else
-    OUTFILE="$3"
-fi
+    
+    if [ _"$1" = _- ]; then
+        ## Read from stdin if supplied filename is -
+        FILE="$DEV"
+    else
+        FILE="$1"
+        ## Exit if file not exists
+        if [ ! -f "$FILE" ]; then
+            errlog "File $FILE not exists."
+            exit 1
+        fi
+    fi
+    echo "$FILE"
+}
 
 ## Show supplied file info
 showinfo () {
@@ -88,43 +145,53 @@ showinfo () {
     echo "$INFO" | grep -a '###SIZE:'    | sed 's/###//g'
     echo "$INFO" | grep -a '###SHA256:'  | sed 's/###//g'
     echo "$INFO" | grep -a '###VERSION:' | sed 's/###//g'
-}
+} # showinfo
 
 ## restore file
 ## $1 input file
 ## $2 output file
 restorefile () {
+    local IN OUT
     _RAW="$(mktemp)"
-    
-    convert PNG:"$1" RGB:"$_RAW"
+    IN="$(fn_check_file "$1" in)"
+    #OUT="$(fn_check_file "$2" out)"
+    convert PNG:"$IN" RGB:"$_RAW"
     
     INFO="$( grep -a '###' "$_RAW" )"
-    _SIZE="$(    echo "$INFO" | grep -a '###SIZE:'    | awk '{print $2}')"
-    _SHA="$(     echo "$INFO" | grep -a '###SHA256:'  | awk '{print $2}')"
-    _VERSION="$( echo "$INFO" | grep -a '###VERSION:' | awk '{print $2}')"
-    _NAME="$(    echo "$INFO" | grep -a '###NAME:'    | sed 's/###NAME: //' | sed 's/ ###//')"
+    _SIZE="$(    echo -n "$INFO" | grep -a '###SIZE:'    | awk '{print $2}')"
+    _SHA="$(     echo -n "$INFO" | grep -a '###SHA256:'  | awk '{print $2}')"
+    _VERSION="$( echo -n "$INFO" | grep -a '###VERSION:' | awk '{print $2}')"
+    _NAME="$(    echo -n "$INFO" | grep -a '###NAME:'    | sed 's/###NAME: //' | sed 's/ ###//')"
+    
+    if [ -z "$2" ]; then
+        DIR="$(dirname "$IN")"
+        OUTPUT="$DIR/$_NAME"
+    else
+        OUTPUT="$2"
+    fi
 
     if [ _"$_SIZE" = _ ] || [ _"$_NAME" = _ ] || [ _"$_SHA" = _ ]; then
         errlog "No data found inside. Restoring failed."
-        rm "$_RAW"
-        exit 1
+        _SIZE=''
+        if [ -z "$_arg_force" ]; then
+            rm "$_RAW"
+            exit 1
+        fi
     fi
     
     if [ _"$_VERSION" != _"$VERSION" ]; then
         errlog "Warning: file was created by different version of $_NAME_."
     fi
     
-    if [ _"$2" = _ ]; then
-        DIR="$(dirname "$1")"
-        OUTPUT="$DIR/$_NAME"
-    else
-        OUTPUT="$2"
+    if [ -n "$_SIZE" ]; then
+        _SIZE="bs=$_SIZE"
     fi
     
-    if [ _"$OUTPUT" = _'/dev/stdout' ]; then
-        dd if="$_RAW" bs="$_SIZE" count=1
+    if [ _"$OUTPUT" = _'-' ]; then
+        OUTPUT='/dev/stdout'
+        dd if="$_RAW" $_SIZE count=1
     else
-        dd if="$_RAW" of="$OUTPUT" bs="$_SIZE" count=1
+        dd if="$_RAW" of="$OUTPUT" $_SIZE count=1
     fi
     
     rm "$_RAW"
@@ -140,7 +207,7 @@ restorefile () {
             exit 1
         fi
     fi
-}
+} # restorefile
 
 ## store file
 ## $1 input file
@@ -149,33 +216,37 @@ storefile () {
     ## force 8 bit depth by setting this env variable
     ## some image hosters don't like 16bit.
     ## using 16 bit by default
-    if [ _"$BITDEPTH" != _8 ]; then
-        BITDEPTH=16
+    if [ -z "$_arg_bitdepth" ]; then
+        _arg_bitdepth=16
     fi
-
-    ## bytes per 3 color pixel
-    PIXBYTE=$(( $BITDEPTH * 3 / 8 ))
     
-    if [ _"$1" = _'/dev/stdin' ] || [ _"$2" = _'/dev/stdout' ]; then
+    IN="$(fn_check_file "$1" in)"
+    #OUT="$(fn_check_file "$2" out)"
+    OUT="$2"
+    
+    ## bytes per 3 color pixel
+    PIXBYTE=$(( $_arg_bitdepth * 3 / 8 ))
+    
+    if [ _"$IN" = _'/dev/stdin' ] || [ _"$OUT" = _'/dev/stdout' ]; then
         errlog "Stdin and stdout not supported for this type of operation."
         exit 1
     fi
     
-    NAME="$(basename "$1")"
+    NAME="$(basename "$IN")"
     
-    if [ "_$2" = _ ]; then
+    if [ -z "$OUT" ]; then
         OUTPUT="$(mktemp 'XXXXXXXXXX.png')"
     else
-        OUTPUT="$2"
+        OUTPUT="$OUT"
     fi
     
-    SHA="$(sha256sum "$1" | awk '{print $1}')"
+    SHA="$(sha256sum "$IN" | awk '{print $1}')"
 
-    SIZE="$(stat -c '%s' "$1")"
+    SIZE="$(stat -c '%s' "$IN")"
 
     TMP="$(mktemp)"
 
-    cp "$1" "$TMP"
+    cp "$IN" "$TMP"
 
     ## Store metadata
     echo '' >> "$TMP"
@@ -185,22 +256,22 @@ storefile () {
     echo "###VERSION: $VERSION ###" >> "$TMP"
 
     SIZE="$(stat -c '%s' "$TMP")"
-
+    
     _PIXELS=$(( $SIZE  / $PIXBYTE ))
-
+    
     errlog "TMP pixels: $_PIXELS"
-
+    
     RESOL="$(echo "sqrt($_PIXELS) +1" | bc)"
-
+    
     errlog "Target resolution: ${RESOL}x${RESOL}"
-
+    
     PIXELS=$(( $RESOL * $RESOL ))
-
+    
     ## calculating target size
     CONTAINERSIZE=$(( $PIXELS * $PIXBYTE ))
-
+    
     errlog "Container size: $CONTAINERSIZE"
-
+    
     BYTESDIFF=$(( $CONTAINERSIZE - $SIZE ))
     
     
@@ -212,21 +283,24 @@ storefile () {
         exit 1
     fi
     
-    convert -size ${RESOL}x${RESOL} -depth $BITDEPTH RGB:"$TMP" PNG00:"$OUTPUT"
+    convert -size ${RESOL}x${RESOL} -depth $_arg_bitdepth RGB:"$TMP" PNG00:"$OUTPUT"
 
     echo "$OUTPUT"
     
     rm "$TMP"
-}
+} # storefile()
 
-if [ "$1" = '-info' ]; then
-    showinfo "$INFILE"
+if [ -n "$_arg_help" ] || [ -n "$_arg_h" ]; then
+    errlog "$USAGE"
     exit 0
-elif [ "$1" = '-restore' ]; then
-    restorefile "$INFILE" "$OUTFILE"
+elif [ -n "$_arg_info" ]; then
+    showinfo "$_arg_info"
     exit 0
-elif [ "$1" = '-store' ]; then
-    storefile "$INFILE" "$OUTFILE"
+elif [ -n "$_arg_restore" ]; then
+    restorefile "$_arg_restore" "$_arg1"
+    exit 0
+elif [ -n "$_arg_store" ]; then
+    storefile "$_arg_store" "$_arg1"
     exit 0
 else
     errlog "$USAGE"
