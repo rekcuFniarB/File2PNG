@@ -144,12 +144,7 @@ fn_check_file() {
 
 ## Show supplied file info
 showinfo () {
-    INFO="$(convert PNG:"$1" RGB:-   | grep -a '###')"
-    echo "$INFO" | grep -a '###NAME:'    | sed 's/:ENAM###//g'   | sed 's/###//g'
-    echo "$INFO" | grep -a '###SIZE:'    | sed 's/:EZIS###//g'   | sed 's/###//g'
-    echo "$INFO" | grep -a '###SHA256:'  | sed 's/:652AHS###//g' | sed 's/###//g'
-    echo "$INFO" | grep -a '###VERSION:' | sed 's/:NOISREV###//g'| sed 's/###//g'
-    echo "$INFO" | grep -a '###COMMENT:' | sed 's/:TNEMMOC###//g'| sed 's/###//g'
+    convert PNG:"$1" RGB:- | sed -En 's/^###(NAME|SIZE|SHA256|VERSION|COMMENT)(.+) .+###/\1\2/p'
 } # showinfo
 
 ## restore file
